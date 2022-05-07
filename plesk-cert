@@ -1,0 +1,38 @@
+#!/bin/bash
+
+# Check if certbot exists
+if ! command -v certbot &> /dev/null
+then
+    yum install certbot -y
+fi
+
+# select domains for subscription
+SUB=$1
+DOMAINS=$(plesk db -Ne "select a.name AS domainname FROM domains AS a inner join hosting  AS b ON b.dom_id = a.id inner join sys_users AS c ON c.id = b.sys_user_id where c.home LIKE '%\/$SUB'")
+CONTENT=""
+
+# concatenate domains to form arg list
+while IFS= read -r line; do
+    CONTENT="${CONTENT} -d $line"
+    if echo $line | grep -q -P '^[a-zA-Z0-9\-]+\.[a-zA-Z0-9]+$'; then
+        CONTENT="${CONTENT} -d www.$line"
+    fi
+done <<< "$DOMAINS"
+
+# generate cert using HTTP Validation
+certbot certonly --webroot -w /var/www/vhosts/default/htdocs $CONTENT --non-interactive --agree-tos -m $EMAIL 
+
+# certs are placed in /etc/letsencrypt/live/<domain>, echo the keys for implementation
+echo "==== CERT ===="
+cat /etc/letsencrypt/live/$SUB/cert.pem
+echo "==== ==== ===="
+echo 
+echo "==== KEY ===="
+cat /etc/letsencrypt/live/$SUB/privkey.pem
+echo "==== ==== ===="
+echo
+echo "==== CHAIN ===="
+cat /etc/letsencrypt/live/$SUB/fullchain.pem
+echo "==== ==== ===="
+
+# pass to third party plugin 
